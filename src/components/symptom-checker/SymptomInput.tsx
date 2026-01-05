@@ -1,10 +1,19 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Mic, MicOff, Loader2, Plus } from "lucide-react";
+import { Send, Mic, MicOff, Loader2, Plus, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SYMPTOM_CATEGORIES } from "@/lib/healthData";
+import { useVoiceInput } from "@/hooks/useVoiceInput";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface SymptomInputProps {
   symptoms: string[];
@@ -13,6 +22,22 @@ interface SymptomInputProps {
   isAnalyzing: boolean;
 }
 
+const SUPPORTED_LANGUAGES = [
+  { code: "en-US", name: "English (US)", flag: "🇺🇸" },
+  { code: "en-GB", name: "English (UK)", flag: "🇬🇧" },
+  { code: "en-AU", name: "English (Australia)", flag: "🇦🇺" },
+  { code: "en-IN", name: "English (India)", flag: "🇮🇳" },
+  { code: "es-ES", name: "Spanish (Spain)", flag: "🇪🇸" },
+  { code: "es-MX", name: "Spanish (Mexico)", flag: "🇲🇽" },
+  { code: "fr-FR", name: "French", flag: "🇫🇷" },
+  { code: "de-DE", name: "German", flag: "🇩🇪" },
+  { code: "hi-IN", name: "Hindi", flag: "🇮🇳" },
+  { code: "pt-BR", name: "Portuguese (Brazil)", flag: "🇧🇷" },
+  { code: "zh-CN", name: "Chinese (Mandarin)", flag: "🇨🇳" },
+  { code: "ja-JP", name: "Japanese", flag: "🇯🇵" },
+  { code: "ar-SA", name: "Arabic", flag: "🇸🇦" },
+];
+
 export function SymptomInput({
   symptoms,
   onSymptomsChange,
@@ -20,9 +45,46 @@ export function SymptomInput({
   isAnalyzing,
 }: SymptomInputProps) {
   const [inputValue, setInputValue] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState("en-US");
   const inputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const {
+    isListening,
+    isSupported,
+    transcript,
+    startListening,
+    stopListening,
+  } = useVoiceInput({
+    language: selectedLanguage,
+    continuous: true,
+    onTranscript: (text) => {
+      // Auto-add recognized speech as symptom
+      const trimmed = text.trim();
+      if (trimmed && !symptoms.includes(trimmed)) {
+        onSymptomsChange([...symptoms, trimmed]);
+        toast({
+          title: "Symptom added",
+          description: `"${trimmed}" has been added to your symptoms.`,
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Voice Input Error",
+        description: error,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Update input with live transcript
+  useEffect(() => {
+    if (isListening && transcript) {
+      setInputValue(transcript);
+    }
+  }, [isListening, transcript]);
 
   const allSymptoms = Object.values(SYMPTOM_CATEGORIES).flatMap(
     (cat) => cat.symptoms
@@ -56,15 +118,22 @@ export function SymptomInput({
   };
 
   const toggleRecording = () => {
-    if (isRecording) {
-      setIsRecording(false);
+    if (isListening) {
+      stopListening();
+      // Add final transcript as symptom if exists
+      if (inputValue.trim() && !symptoms.includes(inputValue.trim())) {
+        addSymptom(inputValue);
+      }
     } else {
-      setIsRecording(true);
-      // Simulated voice recording - in production, use Web Speech API
-      setTimeout(() => {
-        setIsRecording(false);
-        addSymptom("Headache"); // Simulated transcription
-      }, 2000);
+      if (!isSupported) {
+        toast({
+          title: "Voice Input Not Supported",
+          description: "Your browser doesn't support voice input. Try Chrome or Edge.",
+          variant: "destructive",
+        });
+        return;
+      }
+      startListening();
     }
   };
 
@@ -76,13 +145,41 @@ export function SymptomInput({
           How are you feeling today?
         </h2>
         <p className="text-muted-foreground">
-          Describe your symptoms or select from common options below
+          Describe your symptoms using text or voice input
         </p>
+      </div>
+
+      {/* Language selector for voice */}
+      <div className="flex items-center justify-center gap-2">
+        <Volume2 className="w-4 h-4 text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">Voice Language:</span>
+        <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <SelectItem key={lang.code} value={lang.code}>
+                <span className="flex items-center gap-2">
+                  <span>{lang.flag}</span>
+                  <span>{lang.name}</span>
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Input area */}
       <div className="relative">
-        <div className="flex items-center gap-2 p-4 bg-muted/50 rounded-xl border border-border focus-within:border-primary transition-colors">
+        <div
+          className={cn(
+            "flex items-center gap-2 p-4 rounded-xl border transition-all",
+            isListening
+              ? "bg-primary/5 border-primary ring-2 ring-primary/20"
+              : "bg-muted/50 border-border focus-within:border-primary"
+          )}
+        >
           <input
             ref={inputRef}
             type="text"
@@ -94,21 +191,32 @@ export function SymptomInput({
             onKeyDown={handleKeyDown}
             onFocus={() => setShowSuggestions(inputValue.length > 0)}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-            placeholder="Type a symptom..."
+            placeholder={isListening ? "Listening... speak your symptoms" : "Type a symptom..."}
             className="flex-1 bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
+            disabled={isListening}
           />
+          
+          {/* Voice input button */}
           <Button
-            variant={isRecording ? "destructive" : "ghost"}
+            variant={isListening ? "destructive" : "soft"}
             size="icon"
             onClick={toggleRecording}
-            className="shrink-0"
+            className={cn(
+              "shrink-0 relative",
+              isListening && "animate-pulse"
+            )}
+            title={isListening ? "Stop recording" : "Start voice input"}
           >
-            {isRecording ? (
-              <MicOff className="w-5 h-5 animate-pulse" />
+            {isListening ? (
+              <>
+                <MicOff className="w-5 h-5" />
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-destructive rounded-full animate-ping" />
+              </>
             ) : (
               <Mic className="w-5 h-5" />
             )}
           </Button>
+          
           <Button
             variant="ghost"
             size="icon"
@@ -120,8 +228,20 @@ export function SymptomInput({
           </Button>
         </div>
 
+        {/* Voice listening indicator */}
+        {isListening && (
+          <div className="absolute -bottom-6 left-0 right-0 flex items-center justify-center gap-2 text-sm text-primary animate-fade-in">
+            <div className="flex gap-1">
+              <span className="w-1 h-4 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+              <span className="w-1 h-4 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="w-1 h-4 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+            </div>
+            <span>Listening... speak clearly</span>
+          </div>
+        )}
+
         {/* Suggestions dropdown */}
-        {showSuggestions && filteredSuggestions.length > 0 && (
+        {showSuggestions && filteredSuggestions.length > 0 && !isListening && (
           <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-xl shadow-lg z-10 max-h-48 overflow-y-auto">
             {filteredSuggestions.slice(0, 6).map((suggestion) => (
               <button
@@ -138,7 +258,7 @@ export function SymptomInput({
 
       {/* Selected symptoms */}
       {symptoms.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 mt-8">
           {symptoms.map((symptom) => (
             <Badge
               key={symptom}
@@ -169,6 +289,22 @@ export function SymptomInput({
           ))}
         </div>
       </div>
+
+      {/* Voice tips */}
+      {isSupported && (
+        <div className="p-4 bg-accent/50 rounded-xl">
+          <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
+            <Mic className="w-4 h-4 text-primary" />
+            Voice Input Tips
+          </h4>
+          <ul className="text-xs text-muted-foreground space-y-1">
+            <li>• Speak clearly and at a normal pace</li>
+            <li>• Say one symptom at a time for best results</li>
+            <li>• Select your language/accent for better accuracy</li>
+            <li>• Click the microphone again to stop recording</li>
+          </ul>
+        </div>
+      )}
 
       {/* Analyze button */}
       <Button
