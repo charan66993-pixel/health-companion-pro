@@ -113,9 +113,28 @@ export default function SymptomChecker() {
 
       if (error) throw error;
 
+      // Send confirmation email
+      try {
+        await supabase.functions.invoke("send-appointment-email", {
+          body: {
+            userEmail: user!.email,
+            userName: user!.user_metadata?.full_name || user!.email?.split("@")[0],
+            doctorName: doctor.full_name,
+            specialty: doctor.specialty,
+            appointmentDate: date,
+            appointmentTime: time,
+            reason: `Symptom check: ${symptoms.join(", ")}`,
+          },
+        });
+        console.log("Confirmation email sent successfully");
+      } catch (emailError) {
+        console.error("Failed to send confirmation email:", emailError);
+        // Don't fail the booking if email fails
+      }
+
       toast({
         title: "Appointment Booked!",
-        description: `Your appointment with ${doctor.full_name} is confirmed for ${date} at ${time}.`,
+        description: `Your appointment with ${doctor.full_name} is confirmed for ${date} at ${time}. A confirmation email has been sent.`,
       });
 
       navigate("/appointments");
