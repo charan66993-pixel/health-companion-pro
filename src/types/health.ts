@@ -4,10 +4,13 @@ export interface SymptomAnalysis {
   symptomCategories: string[];
   followUpQuestions: string[];
   homeRemedies: string[];
+  routineCare?: string[];
   recommendedSpecialist: string;
   summary: string;
   precautions: string[];
   warningSignsToWatch: string[];
+  needsClarification?: boolean;
+  clarificationMessage?: string;
 }
 
 export interface Doctor {

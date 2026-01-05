@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { symptoms, followUpResponses } = await req.json();
+    const { symptoms, followUpResponses, naturalLanguageInput } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     if (!LOVABLE_API_KEY) {
@@ -19,6 +19,7 @@ serve(async (req) => {
     }
 
     console.log("Analyzing symptoms:", symptoms);
+    console.log("Natural language input:", naturalLanguageInput);
     console.log("Follow-up responses:", followUpResponses);
 
     const systemPrompt = `You are an AI health assistant (not a doctor). Your role is to help users understand their symptoms and provide guidance on next steps. You must:
@@ -26,27 +27,80 @@ serve(async (req) => {
 1. NEVER provide medical diagnoses - only suggest possible conditions that warrant professional evaluation
 2. Always recommend consulting a healthcare professional for proper diagnosis
 3. Be empathetic and clear in your communication
-4. Classify urgency appropriately:
-   - EMERGENCY: Life-threatening symptoms (chest pain, difficulty breathing, stroke symptoms, severe bleeding, loss of consciousness)
-   - URGENT: Symptoms needing same-day medical attention (high fever, severe pain, worsening symptoms)
-   - ROUTINE: Common symptoms manageable with home care or scheduled appointment
+4. Handle both structured symptom lists AND natural language descriptions
+5. For common issues like cold, flu, fever - provide helpful routine care advice
+6. When symptoms are vague (like "I don't feel well", "something is wrong"), ask clarifying questions
+
+Classify urgency appropriately:
+- EMERGENCY: Life-threatening symptoms (chest pain, difficulty breathing, stroke symptoms, severe bleeding, loss of consciousness)
+- URGENT: Symptoms needing same-day medical attention (high fever >103°F, severe pain, worsening symptoms, dehydration)
+- ROUTINE: Common symptoms manageable with home care or scheduled appointment (cold, mild fever, headache, minor aches)
+
+For ROUTINE cases, always include practical home remedies and routine care tips like:
+- Stay hydrated (drink 8+ glasses of water daily)
+- Get adequate rest (7-9 hours of sleep)
+- Take over-the-counter medications as appropriate
+- Monitor symptoms and their progression
+
+When symptoms are vague, set needsClarification to true and ask about:
+- Duration: "How long have you been experiencing this?"
+- Location: "Where exactly do you feel discomfort?"
+- Severity: "On a scale of 1-10, how severe is it?"
+- Associated symptoms: "Are you experiencing any other symptoms?"
+- Triggers: "Did anything specific trigger this?"
 
 Respond with a JSON object (no markdown) containing:
 {
   "urgencyLevel": "emergency" | "urgent" | "routine",
   "possibleConditions": ["condition1", "condition2", ...],
   "symptomCategories": ["respiratory" | "gastrointestinal" | "cardiac" | "neurological" | "musculoskeletal" | "dermatological" | "general"],
-  "followUpQuestions": ["question1", "question2", ...] (max 3 questions if symptoms are vague),
-  "homeRemedies": ["remedy1", "remedy2", ...] (only for routine cases),
+  "followUpQuestions": ["question1", "question2", ...] (max 3-5 questions if symptoms are vague),
+  "homeRemedies": ["remedy1", "remedy2", ...] (for routine cases, be specific and actionable),
+  "routineCare": ["tip1", "tip2", ...] (general wellness advice),
   "recommendedSpecialist": "General Practitioner" | "Pulmonologist" | "Cardiologist" | "Gastroenterologist" | "Neurologist" | "Emergency Medicine" | "Dermatologist" | "Orthopedist",
   "summary": "Brief empathetic summary of the analysis",
   "precautions": ["precaution1", "precaution2", ...],
-  "warningSignsToWatch": ["sign1", "sign2", ...]
+  "warningSignsToWatch": ["sign1", "sign2", ...],
+  "needsClarification": true/false,
+  "clarificationMessage": "Friendly message asking for more details if symptoms are vague"
 }`;
 
-    const userMessage = followUpResponses 
-      ? `Initial symptoms: ${symptoms.join(", ")}\n\nAdditional information from follow-up questions:\n${JSON.stringify(followUpResponses, null, 2)}\n\nPlease provide your analysis based on all this information.`
-      : `The user reports the following symptoms: ${symptoms.join(", ")}\n\nAnalyze these symptoms and provide your assessment. If the symptoms are vague or need clarification, include follow-up questions.`;
+    let userMessage = "";
+    
+    // Handle natural language input
+    if (naturalLanguageInput && naturalLanguageInput.trim()) {
+      userMessage = `The user describes their health concern in their own words: "${naturalLanguageInput}"
+
+Please analyze this input carefully:
+1. Extract any symptoms mentioned (explicit or implied)
+2. If the description is vague or unclear, set needsClarification to true and provide helpful follow-up questions
+3. Provide appropriate guidance based on what you can understand
+4. For common issues like cold, flu, fever - provide specific home remedies`;
+    } 
+    // Handle structured symptom list
+    else if (symptoms && symptoms.length > 0) {
+      userMessage = `The user has reported the following symptoms: ${symptoms.join(", ")}
+
+Please analyze these symptoms and provide your assessment. If they seem related to common conditions like cold, flu, or fever, provide specific home remedies and routine care advice.`;
+    }
+    // Handle both together
+    if (naturalLanguageInput && symptoms && symptoms.length > 0) {
+      userMessage = `The user has described their condition as: "${naturalLanguageInput}"
+Additionally, they selected these specific symptoms: ${symptoms.join(", ")}
+
+Please analyze all this information together.`;
+    }
+
+    // Add follow-up responses if provided
+    if (followUpResponses && Object.keys(followUpResponses).length > 0) {
+      userMessage += `\n\nThe user has provided additional information from follow-up questions:\n`;
+      for (const [question, answer] of Object.entries(followUpResponses)) {
+        userMessage += `- Question: "${question}"\n  Answer: "${answer}"\n`;
+      }
+      userMessage += `\nBased on this additional information, provide a more accurate assessment. Set needsClarification to false since we now have more details.`;
+    }
+
+    console.log("User message to AI:", userMessage);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -96,19 +150,40 @@ Respond with a JSON object (no markdown) containing:
     try {
       const cleanedContent = content.replace(/```json\n?|\n?```/g, '').trim();
       analysis = JSON.parse(cleanedContent);
+      
+      // Ensure routineCare exists
+      if (!analysis.routineCare) {
+        analysis.routineCare = [
+          "Stay hydrated - drink at least 8 glasses of water daily",
+          "Get plenty of rest - aim for 7-9 hours of sleep",
+          "Eat nutritious foods to support your immune system",
+          "Monitor your symptoms and note any changes"
+        ];
+      }
     } catch (parseError) {
       console.error("Failed to parse AI response:", parseError);
       // Provide a default response if parsing fails
       analysis = {
         urgencyLevel: "routine",
-        possibleConditions: ["Unable to analyze - please consult a healthcare professional"],
+        possibleConditions: ["Unable to analyze - please provide more details or consult a healthcare professional"],
         symptomCategories: ["general"],
-        followUpQuestions: [],
-        homeRemedies: ["Rest", "Stay hydrated", "Monitor symptoms"],
+        followUpQuestions: [
+          "Can you describe your symptoms in more detail?",
+          "When did you first notice these symptoms?",
+          "How severe would you rate your discomfort on a scale of 1-10?"
+        ],
+        homeRemedies: ["Rest and stay hydrated", "Monitor your symptoms"],
+        routineCare: [
+          "Stay hydrated - drink at least 8 glasses of water daily",
+          "Get plenty of rest - aim for 7-9 hours of sleep",
+          "Eat nutritious foods to support your immune system"
+        ],
         recommendedSpecialist: "General Practitioner",
-        summary: "I couldn't fully analyze your symptoms. Please consult with a healthcare professional for proper evaluation.",
+        summary: "I need more information to provide accurate guidance. Please describe your symptoms in more detail.",
         precautions: ["Seek medical attention if symptoms worsen"],
         warningSignsToWatch: ["Worsening of symptoms", "New symptoms developing"],
+        needsClarification: true,
+        clarificationMessage: "I'd like to help you better. Could you please describe what you're experiencing in more detail?"
       };
     }
 
