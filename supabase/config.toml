@@ -1,4 +1,7 @@
 project_id = "zkmbcbuwotaosiswfjsv"
 
+[functions.send-appointment-email]
+verify_jwt = false
+
 [functions.analyze-symptoms]
 verify_jwt = false
