@@ -1,19 +1,29 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Mic, MicOff, Loader2, Plus, Volume2 } from "lucide-react";
+import { Send, Mic, MicOff, Loader2, Plus, Volume2, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SYMPTOM_CATEGORIES } from "@/lib/healthData";
+import { VOICE_LANGUAGES, LANGUAGE_GROUPS } from "@/lib/voiceLanguages";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
 
 interface SymptomInputProps {
   symptoms: string[];
@@ -21,22 +31,6 @@ interface SymptomInputProps {
   onAnalyze: () => void;
   isAnalyzing: boolean;
 }
-
-const SUPPORTED_LANGUAGES = [
-  { code: "en-US", name: "English (US)", flag: "🇺🇸" },
-  { code: "en-GB", name: "English (UK)", flag: "🇬🇧" },
-  { code: "en-AU", name: "English (Australia)", flag: "🇦🇺" },
-  { code: "en-IN", name: "English (India)", flag: "🇮🇳" },
-  { code: "es-ES", name: "Spanish (Spain)", flag: "🇪🇸" },
-  { code: "es-MX", name: "Spanish (Mexico)", flag: "🇲🇽" },
-  { code: "fr-FR", name: "French", flag: "🇫🇷" },
-  { code: "de-DE", name: "German", flag: "🇩🇪" },
-  { code: "hi-IN", name: "Hindi", flag: "🇮🇳" },
-  { code: "pt-BR", name: "Portuguese (Brazil)", flag: "🇧🇷" },
-  { code: "zh-CN", name: "Chinese (Mandarin)", flag: "🇨🇳" },
-  { code: "ja-JP", name: "Japanese", flag: "🇯🇵" },
-  { code: "ar-SA", name: "Arabic", flag: "🇸🇦" },
-];
 
 export function SymptomInput({
   symptoms,
@@ -47,6 +41,8 @@ export function SymptomInput({
   const [inputValue, setInputValue] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("en-US");
+  const [languageSearch, setLanguageSearch] = useState("");
+  const [isLanguageOpen, setIsLanguageOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -60,7 +56,6 @@ export function SymptomInput({
     language: selectedLanguage,
     continuous: true,
     onTranscript: (text) => {
-      // Auto-add recognized speech as symptom
       const trimmed = text.trim();
       if (trimmed && !symptoms.includes(trimmed)) {
         onSymptomsChange([...symptoms, trimmed]);
@@ -79,7 +74,6 @@ export function SymptomInput({
     },
   });
 
-  // Update input with live transcript
   useEffect(() => {
     if (isListening && transcript) {
       setInputValue(transcript);
@@ -95,6 +89,13 @@ export function SymptomInput({
       s.toLowerCase().includes(inputValue.toLowerCase()) &&
       !symptoms.includes(s)
   );
+
+  const filteredLanguages = VOICE_LANGUAGES.filter((lang) =>
+    lang.name.toLowerCase().includes(languageSearch.toLowerCase()) ||
+    lang.code.toLowerCase().includes(languageSearch.toLowerCase())
+  );
+
+  const selectedLangInfo = VOICE_LANGUAGES.find((l) => l.code === selectedLanguage);
 
   const addSymptom = (symptom: string) => {
     const trimmed = symptom.trim();
@@ -120,7 +121,6 @@ export function SymptomInput({
   const toggleRecording = () => {
     if (isListening) {
       stopListening();
-      // Add final transcript as symptom if exists
       if (inputValue.trim() && !symptoms.includes(inputValue.trim())) {
         addSymptom(inputValue);
       }
@@ -151,23 +151,88 @@ export function SymptomInput({
 
       {/* Language selector for voice */}
       <div className="flex items-center justify-center gap-2">
-        <Volume2 className="w-4 h-4 text-muted-foreground" />
+        <Globe className="w-4 h-4 text-muted-foreground" />
         <span className="text-sm text-muted-foreground">Voice Language:</span>
-        <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SUPPORTED_LANGUAGES.map((lang) => (
-              <SelectItem key={lang.code} value={lang.code}>
-                <span className="flex items-center gap-2">
-                  <span>{lang.flag}</span>
-                  <span>{lang.name}</span>
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Popover open={isLanguageOpen} onOpenChange={setIsLanguageOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="w-[220px] justify-start gap-2">
+              <span>{selectedLangInfo?.flag}</span>
+              <span className="truncate">{selectedLangInfo?.name || "Select language"}</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[300px] p-0" align="center">
+            <div className="p-2 border-b">
+              <Input
+                placeholder="Search languages..."
+                value={languageSearch}
+                onChange={(e) => setLanguageSearch(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <ScrollArea className="h-[300px]">
+              <div className="p-2">
+                {languageSearch ? (
+                  // Show filtered results
+                  <div className="space-y-1">
+                    {filteredLanguages.map((lang) => (
+                      <button
+                        key={lang.code}
+                        onClick={() => {
+                          setSelectedLanguage(lang.code);
+                          setIsLanguageOpen(false);
+                          setLanguageSearch("");
+                        }}
+                        className={cn(
+                          "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors",
+                          selectedLanguage === lang.code
+                            ? "bg-primary text-primary-foreground"
+                            : "hover:bg-accent"
+                        )}
+                      >
+                        <span>{lang.flag}</span>
+                        <span>{lang.name}</span>
+                      </button>
+                    ))}
+                    {filteredLanguages.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No languages found
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  // Show grouped languages
+                  Object.entries(LANGUAGE_GROUPS).map(([group, languages]) => (
+                    <div key={group} className="mb-4">
+                      <p className="text-xs font-semibold text-muted-foreground px-3 py-1">
+                        {group}
+                      </p>
+                      <div className="space-y-1">
+                        {languages.map((lang) => (
+                          <button
+                            key={lang.code}
+                            onClick={() => {
+                              setSelectedLanguage(lang.code);
+                              setIsLanguageOpen(false);
+                            }}
+                            className={cn(
+                              "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors",
+                              selectedLanguage === lang.code
+                                ? "bg-primary text-primary-foreground"
+                                : "hover:bg-accent"
+                            )}
+                          >
+                            <span>{lang.flag}</span>
+                            <span>{lang.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Input area */}
@@ -236,7 +301,7 @@ export function SymptomInput({
               <span className="w-1 h-4 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
               <span className="w-1 h-4 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
             </div>
-            <span>Listening... speak clearly</span>
+            <span>Listening in {selectedLangInfo?.name}...</span>
           </div>
         )}
 
@@ -300,7 +365,7 @@ export function SymptomInput({
           <ul className="text-xs text-muted-foreground space-y-1">
             <li>• Speak clearly and at a normal pace</li>
             <li>• Say one symptom at a time for best results</li>
-            <li>• Select your language/accent for better accuracy</li>
+            <li>• Select your language/accent from {VOICE_LANGUAGES.length}+ options</li>
             <li>• Click the microphone again to stop recording</li>
           </ul>
         </div>

@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { Heart, Menu, X, User, LogOut } from "lucide-react";
+import { Heart, Menu, X, User, LogOut, Activity } from "lucide-react";
 import { useState } from "react";
 import {
   DropdownMenu,
@@ -48,6 +48,12 @@ export function Navbar() {
                   className="text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Symptom Checker
+                </Link>
+                <Link
+                  to="/health-history"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Health History
                 </Link>
                 <Link
                   to="/appointments"
@@ -127,6 +133,13 @@ export function Navbar() {
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Symptom Checker
+                  </Link>
+                  <Link
+                    to="/health-history"
+                    className="px-4 py-2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Health History
                   </Link>
                   <Link
                     to="/appointments"
