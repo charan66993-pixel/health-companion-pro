@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { Heart, Menu, X, User, LogOut, Activity } from "lucide-react";
+import { Heart, Menu, X, User, LogOut, Activity, UserRound, Calendar } from "lucide-react";
 import { useState } from "react";
 import {
   DropdownMenu,
@@ -41,27 +41,34 @@ export function Navbar() {
             >
               Home
             </Link>
+            <Link
+              to="/symptom-checker"
+              className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            >
+              <Activity className="w-4 h-4" />
+              Symptom Checker
+            </Link>
+            <Link
+              to="/doctors"
+              className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            >
+              <UserRound className="w-4 h-4" />
+              Doctors
+            </Link>
+            <Link
+              to="/appointments"
+              className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            >
+              <Calendar className="w-4 h-4" />
+              Appointments
+            </Link>
             {user && (
-              <>
-                <Link
-                  to="/symptom-checker"
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Symptom Checker
-                </Link>
-                <Link
-                  to="/health-history"
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Health History
-                </Link>
-                <Link
-                  to="/appointments"
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Appointments
-                </Link>
-              </>
+              <Link
+                to="/health-history"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Health History
+              </Link>
             )}
           </div>
 
@@ -125,30 +132,38 @@ export function Navbar() {
               >
                 Home
               </Link>
+              <Link
+                to="/symptom-checker"
+                className="px-4 py-2 text-muted-foreground hover:text-foreground flex items-center gap-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <Activity className="w-4 h-4" />
+                Symptom Checker
+              </Link>
+              <Link
+                to="/doctors"
+                className="px-4 py-2 text-muted-foreground hover:text-foreground flex items-center gap-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <UserRound className="w-4 h-4" />
+                Doctors
+              </Link>
+              <Link
+                to="/appointments"
+                className="px-4 py-2 text-muted-foreground hover:text-foreground flex items-center gap-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <Calendar className="w-4 h-4" />
+                Appointments
+              </Link>
               {user && (
-                <>
-                  <Link
-                    to="/symptom-checker"
-                    className="px-4 py-2 text-muted-foreground hover:text-foreground"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Symptom Checker
-                  </Link>
-                  <Link
-                    to="/health-history"
-                    className="px-4 py-2 text-muted-foreground hover:text-foreground"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Health History
-                  </Link>
-                  <Link
-                    to="/appointments"
-                    className="px-4 py-2 text-muted-foreground hover:text-foreground"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Appointments
-                  </Link>
-                </>
+                <Link
+                  to="/health-history"
+                  className="px-4 py-2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Health History
+                </Link>
               )}
               <div className="px-4 pt-4 border-t border-border">
                 {user ? (

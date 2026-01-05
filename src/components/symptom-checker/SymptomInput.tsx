@@ -1,22 +1,14 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Mic, MicOff, Loader2, Plus, Volume2, Globe } from "lucide-react";
+import { Send, Mic, MicOff, Loader2, Plus, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { SYMPTOM_CATEGORIES } from "@/lib/healthData";
 import { VOICE_LANGUAGES, LANGUAGE_GROUPS } from "@/lib/voiceLanguages";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Popover,
   PopoverContent,
@@ -28,13 +20,27 @@ import { Input } from "@/components/ui/input";
 interface SymptomInputProps {
   symptoms: string[];
   onSymptomsChange: (symptoms: string[]) => void;
+  naturalLanguageInput: string;
+  onNaturalLanguageChange: (value: string) => void;
   onAnalyze: () => void;
   isAnalyzing: boolean;
 }
 
+// Common health issues for quick selection
+const COMMON_HEALTH_ISSUES = [
+  { name: "Common Cold", symptoms: ["Runny nose", "Sore throat", "Sneezing", "Cough"] },
+  { name: "Fever", symptoms: ["Fever", "Chills", "Body aches", "Fatigue"] },
+  { name: "Headache", symptoms: ["Headache", "Sensitivity to light", "Nausea"] },
+  { name: "Stomach Upset", symptoms: ["Nausea", "Stomach pain", "Bloating"] },
+  { name: "Allergies", symptoms: ["Sneezing", "Runny nose", "Itchy eyes", "Congestion"] },
+  { name: "Muscle Pain", symptoms: ["Muscle pain", "Stiffness", "Limited range of motion"] },
+];
+
 export function SymptomInput({
   symptoms,
   onSymptomsChange,
+  naturalLanguageInput,
+  onNaturalLanguageChange,
   onAnalyze,
   isAnalyzing,
 }: SymptomInputProps) {
@@ -57,11 +63,14 @@ export function SymptomInput({
     continuous: true,
     onTranscript: (text) => {
       const trimmed = text.trim();
-      if (trimmed && !symptoms.includes(trimmed)) {
-        onSymptomsChange([...symptoms, trimmed]);
+      if (trimmed) {
+        // Append to natural language input for more context
+        onNaturalLanguageChange(
+          naturalLanguageInput ? `${naturalLanguageInput}. ${trimmed}` : trimmed
+        );
         toast({
-          title: "Symptom added",
-          description: `"${trimmed}" has been added to your symptoms.`,
+          title: "Voice input captured",
+          description: `"${trimmed}" has been added.`,
         });
       }
     },
@@ -137,6 +146,17 @@ export function SymptomInput({
     }
   };
 
+  const addCommonIssue = (issue: typeof COMMON_HEALTH_ISSUES[0]) => {
+    const newSymptoms = issue.symptoms.filter(s => !symptoms.includes(s));
+    onSymptomsChange([...symptoms, ...newSymptoms]);
+    toast({
+      title: `Added ${issue.name} symptoms`,
+      description: `${newSymptoms.length} symptoms added`,
+    });
+  };
+
+  const canAnalyze = symptoms.length > 0 || naturalLanguageInput.trim().length > 0;
+
   return (
     <Card className="p-6 space-y-6">
       {/* Header */}
@@ -145,7 +165,23 @@ export function SymptomInput({
           How are you feeling today?
         </h2>
         <p className="text-muted-foreground">
-          Describe your symptoms using text or voice input
+          Describe your symptoms in your own words or select from the list
+        </p>
+      </div>
+
+      {/* Natural language input */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-foreground">
+          Describe how you're feeling:
+        </label>
+        <Textarea
+          value={naturalLanguageInput}
+          onChange={(e) => onNaturalLanguageChange(e.target.value)}
+          placeholder="E.g., I've had a headache for 2 days and feel tired. I also have a mild fever..."
+          className="min-h-[100px] resize-none"
+        />
+        <p className="text-xs text-muted-foreground">
+          Be as specific as possible - include duration, severity, and any other details
         </p>
       </div>
 
@@ -172,7 +208,6 @@ export function SymptomInput({
             <ScrollArea className="h-[300px]">
               <div className="p-2">
                 {languageSearch ? (
-                  // Show filtered results
                   <div className="space-y-1">
                     {filteredLanguages.map((lang) => (
                       <button
@@ -200,7 +235,6 @@ export function SymptomInput({
                     )}
                   </div>
                 ) : (
-                  // Show grouped languages
                   Object.entries(LANGUAGE_GROUPS).map(([group, languages]) => (
                     <div key={group} className="mb-4">
                       <p className="text-xs font-semibold text-muted-foreground px-3 py-1">
@@ -233,97 +267,115 @@ export function SymptomInput({
             </ScrollArea>
           </PopoverContent>
         </Popover>
+        
+        {/* Voice button */}
+        <Button
+          variant={isListening ? "destructive" : "outline"}
+          size="icon"
+          onClick={toggleRecording}
+          className={cn("shrink-0 relative", isListening && "animate-pulse")}
+          title={isListening ? "Stop recording" : "Start voice input"}
+        >
+          {isListening ? (
+            <>
+              <MicOff className="w-5 h-5" />
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-destructive rounded-full animate-ping" />
+            </>
+          ) : (
+            <Mic className="w-5 h-5" />
+          )}
+        </Button>
       </div>
 
-      {/* Input area */}
-      <div className="relative">
-        <div
-          className={cn(
-            "flex items-center gap-2 p-4 rounded-xl border transition-all",
-            isListening
-              ? "bg-primary/5 border-primary ring-2 ring-primary/20"
-              : "bg-muted/50 border-border focus-within:border-primary"
-          )}
-        >
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputValue}
-            onChange={(e) => {
-              setInputValue(e.target.value);
-              setShowSuggestions(e.target.value.length > 0);
-            }}
-            onKeyDown={handleKeyDown}
-            onFocus={() => setShowSuggestions(inputValue.length > 0)}
-            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-            placeholder={isListening ? "Listening... speak your symptoms" : "Type a symptom..."}
-            className="flex-1 bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
-            disabled={isListening}
-          />
-          
-          {/* Voice input button */}
-          <Button
-            variant={isListening ? "destructive" : "soft"}
-            size="icon"
-            onClick={toggleRecording}
-            className={cn(
-              "shrink-0 relative",
-              isListening && "animate-pulse"
-            )}
-            title={isListening ? "Stop recording" : "Start voice input"}
-          >
-            {isListening ? (
-              <>
-                <MicOff className="w-5 h-5" />
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-destructive rounded-full animate-ping" />
-              </>
-            ) : (
-              <Mic className="w-5 h-5" />
-            )}
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => addSymptom(inputValue)}
-            disabled={!inputValue.trim()}
-            className="shrink-0"
-          >
-            <Plus className="w-5 h-5" />
-          </Button>
+      {/* Voice listening indicator */}
+      {isListening && (
+        <div className="flex items-center justify-center gap-2 text-sm text-primary animate-fade-in">
+          <div className="flex gap-1">
+            <span className="w-1 h-4 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+            <span className="w-1 h-4 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+            <span className="w-1 h-4 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+          </div>
+          <span>Listening in {selectedLangInfo?.name}...</span>
         </div>
+      )}
 
-        {/* Voice listening indicator */}
-        {isListening && (
-          <div className="absolute -bottom-6 left-0 right-0 flex items-center justify-center gap-2 text-sm text-primary animate-fade-in">
-            <div className="flex gap-1">
-              <span className="w-1 h-4 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-              <span className="w-1 h-4 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-              <span className="w-1 h-4 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+      {/* Common health issues */}
+      <div className="space-y-3">
+        <p className="text-sm font-medium text-muted-foreground">
+          Common health issues:
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {COMMON_HEALTH_ISSUES.map((issue) => (
+            <Button
+              key={issue.name}
+              variant="outline"
+              size="sm"
+              onClick={() => addCommonIssue(issue)}
+              className="text-xs"
+            >
+              {issue.name}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {/* Add specific symptoms */}
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-muted-foreground">
+          Add specific symptoms:
+        </p>
+        <div className="relative">
+          <div
+            className={cn(
+              "flex items-center gap-2 p-3 rounded-xl border transition-all",
+              "bg-muted/50 border-border focus-within:border-primary"
+            )}
+          >
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputValue}
+              onChange={(e) => {
+                setInputValue(e.target.value);
+                setShowSuggestions(e.target.value.length > 0);
+              }}
+              onKeyDown={handleKeyDown}
+              onFocus={() => setShowSuggestions(inputValue.length > 0)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+              placeholder="Type a symptom..."
+              className="flex-1 bg-transparent outline-none text-foreground placeholder:text-muted-foreground text-sm"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => addSymptom(inputValue)}
+              disabled={!inputValue.trim()}
+              className="shrink-0 h-8 w-8"
+            >
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
+
+          {/* Suggestions dropdown */}
+          {showSuggestions && filteredSuggestions.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-xl shadow-lg z-10 max-h-48 overflow-y-auto">
+              {filteredSuggestions.slice(0, 6).map((suggestion) => (
+                <button
+                  key={suggestion}
+                  onClick={() => addSymptom(suggestion)}
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors first:rounded-t-xl last:rounded-b-xl"
+                >
+                  {suggestion}
+                </button>
+              ))}
             </div>
-            <span>Listening in {selectedLangInfo?.name}...</span>
-          </div>
-        )}
-
-        {/* Suggestions dropdown */}
-        {showSuggestions && filteredSuggestions.length > 0 && !isListening && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-xl shadow-lg z-10 max-h-48 overflow-y-auto">
-            {filteredSuggestions.slice(0, 6).map((suggestion) => (
-              <button
-                key={suggestion}
-                onClick={() => addSymptom(suggestion)}
-                className="w-full px-4 py-3 text-left hover:bg-accent transition-colors first:rounded-t-xl last:rounded-b-xl"
-              >
-                {suggestion}
-              </button>
-            ))}
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Selected symptoms */}
       {symptoms.length > 0 && (
-        <div className="flex flex-wrap gap-2 mt-8">
+        <div className="flex flex-wrap gap-2">
           {symptoms.map((symptom) => (
             <Badge
               key={symptom}
@@ -355,29 +407,13 @@ export function SymptomInput({
         </div>
       </div>
 
-      {/* Voice tips */}
-      {isSupported && (
-        <div className="p-4 bg-accent/50 rounded-xl">
-          <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
-            <Mic className="w-4 h-4 text-primary" />
-            Voice Input Tips
-          </h4>
-          <ul className="text-xs text-muted-foreground space-y-1">
-            <li>• Speak clearly and at a normal pace</li>
-            <li>• Say one symptom at a time for best results</li>
-            <li>• Select your language/accent from {VOICE_LANGUAGES.length}+ options</li>
-            <li>• Click the microphone again to stop recording</li>
-          </ul>
-        </div>
-      )}
-
       {/* Analyze button */}
       <Button
         variant="hero"
         size="lg"
         className="w-full"
         onClick={onAnalyze}
-        disabled={symptoms.length === 0 || isAnalyzing}
+        disabled={!canAnalyze || isAnalyzing}
       >
         {isAnalyzing ? (
           <>
@@ -391,6 +427,12 @@ export function SymptomInput({
           </>
         )}
       </Button>
+
+      {!canAnalyze && (
+        <p className="text-xs text-center text-muted-foreground">
+          Please describe your symptoms or select at least one symptom
+        </p>
+      )}
     </Card>
   );
 }

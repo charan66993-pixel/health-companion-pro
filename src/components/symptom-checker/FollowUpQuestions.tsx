@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { ArrowRight, ArrowLeft, Loader2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowRight, ArrowLeft, Loader2, MessageCircle } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
 interface FollowUpQuestionsProps {
   questions: string[];
+  clarificationMessage?: string;
   onSubmit: (responses: Record<string, string>) => void;
   onBack: () => void;
   isLoading: boolean;
@@ -13,6 +14,7 @@ interface FollowUpQuestionsProps {
 
 export function FollowUpQuestions({
   questions,
+  clarificationMessage,
   onSubmit,
   onBack,
   isLoading,
@@ -49,14 +51,22 @@ export function FollowUpQuestions({
   return (
     <Card className="animate-fade-in">
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>Follow-up Questions</CardTitle>
+        <div className="flex items-center gap-2">
+          <MessageCircle className="w-5 h-5 text-primary" />
+          <CardTitle>A Few More Questions</CardTitle>
+        </div>
+        {clarificationMessage && (
+          <CardDescription className="text-base mt-2">
+            {clarificationMessage}
+          </CardDescription>
+        )}
+        <div className="flex items-center justify-between mt-4">
           <span className="text-sm text-muted-foreground">
-            {currentIndex + 1} of {questions.length}
+            Question {currentIndex + 1} of {questions.length}
           </span>
         </div>
         {/* Progress bar */}
-        <div className="w-full bg-muted rounded-full h-2 mt-4">
+        <div className="w-full bg-muted rounded-full h-2 mt-2">
           <div
             className="bg-primary h-2 rounded-full transition-all duration-300"
             style={{
@@ -73,9 +83,12 @@ export function FollowUpQuestions({
           <Textarea
             value={responses[currentQuestion] || ""}
             onChange={(e) => handleResponse(e.target.value)}
-            placeholder="Type your answer..."
+            placeholder="Type your answer here... Be as specific as possible."
             className="min-h-[120px] resize-none"
           />
+          <p className="text-xs text-muted-foreground">
+            The more details you provide, the better advice we can give you.
+          </p>
         </div>
 
         <div className="flex gap-4">

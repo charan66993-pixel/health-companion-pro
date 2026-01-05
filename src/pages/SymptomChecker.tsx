@@ -21,6 +21,7 @@ export default function SymptomChecker() {
 
   const [step, setStep] = useState<Step>("input");
   const [symptoms, setSymptoms] = useState<string[]>([]);
+  const [naturalLanguageInput, setNaturalLanguageInput] = useState("");
   const [analysis, setAnalysis] = useState<SymptomAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
@@ -44,10 +45,24 @@ export default function SymptomChecker() {
   }
 
   const analyzeSymptoms = async (followUpResponses?: Record<string, string>) => {
+    // Validate that we have either symptoms or natural language input
+    if (symptoms.length === 0 && !naturalLanguageInput.trim()) {
+      toast({
+        title: "No symptoms provided",
+        description: "Please describe your symptoms or select from the list.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsAnalyzing(true);
     try {
       const { data, error } = await supabase.functions.invoke("analyze-symptoms", {
-        body: { symptoms, followUpResponses },
+        body: { 
+          symptoms, 
+          naturalLanguageInput: naturalLanguageInput.trim(),
+          followUpResponses 
+        },
       });
 
       if (error) {
@@ -61,10 +76,10 @@ export default function SymptomChecker() {
       const analysisResult = data as SymptomAnalysis;
       setAnalysis(analysisResult);
 
-      // If there are follow-up questions and no responses yet, show follow-up step
+      // Check if AI needs clarification or has follow-up questions
       if (
-        analysisResult.followUpQuestions &&
-        analysisResult.followUpQuestions.length > 0 &&
+        (analysisResult.needsClarification || 
+         (analysisResult.followUpQuestions && analysisResult.followUpQuestions.length > 0)) &&
         !followUpResponses
       ) {
         setStep("followup");
@@ -74,7 +89,7 @@ export default function SymptomChecker() {
         // Save session to database
         await supabase.from("symptom_sessions").insert({
           user_id: user!.id,
-          symptoms,
+          symptoms: symptoms.length > 0 ? symptoms : [naturalLanguageInput],
           symptom_categories: analysisResult.symptomCategories,
           ai_analysis: analysisResult as any,
           urgency_level: analysisResult.urgencyLevel,
@@ -106,7 +121,7 @@ export default function SymptomChecker() {
         doctor_id: doctor.id,
         appointment_date: date,
         appointment_time: time,
-        reason: `Symptom check: ${symptoms.join(", ")}`,
+        reason: `Symptom check: ${symptoms.length > 0 ? symptoms.join(", ") : naturalLanguageInput}`,
         symptoms_summary: analysis?.summary || "",
         status: "confirmed",
       });
@@ -123,7 +138,7 @@ export default function SymptomChecker() {
             specialty: doctor.specialty,
             appointmentDate: date,
             appointmentTime: time,
-            reason: `Symptom check: ${symptoms.join(", ")}`,
+            reason: `Symptom check: ${symptoms.length > 0 ? symptoms.join(", ") : naturalLanguageInput}`,
           },
         });
         console.log("Confirmation email sent successfully");
@@ -152,6 +167,7 @@ export default function SymptomChecker() {
 
   const handleStartOver = () => {
     setSymptoms([]);
+    setNaturalLanguageInput("");
     setAnalysis(null);
     setStep("input");
   };
@@ -165,14 +181,17 @@ export default function SymptomChecker() {
           <SymptomInput
             symptoms={symptoms}
             onSymptomsChange={setSymptoms}
+            naturalLanguageInput={naturalLanguageInput}
+            onNaturalLanguageChange={setNaturalLanguageInput}
             onAnalyze={() => analyzeSymptoms()}
             isAnalyzing={isAnalyzing}
           />
         )}
 
-        {step === "followup" && analysis?.followUpQuestions && (
+        {step === "followup" && analysis && (
           <FollowUpQuestions
-            questions={analysis.followUpQuestions}
+            questions={analysis.followUpQuestions || []}
+            clarificationMessage={analysis.clarificationMessage}
             onSubmit={(responses) => analyzeSymptoms(responses)}
             onBack={() => setStep("input")}
             isLoading={isAnalyzing}
